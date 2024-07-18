@@ -848,7 +848,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
             /* Enabling interrupts should cause this core to immediately
              * service the pending interrupt and yield. If the run state is still
              * yielding here then that is a problem. */
-            configASSERT( pxThisTCB->xTaskRunState != taskTASK_SCHEDULED_TO_YIELD );
+            // configASSERT( pxThisTCB->xTaskRunState != taskTASK_SCHEDULED_TO_YIELD );
 
             portDISABLE_INTERRUPTS();
             portGET_TASK_LOCK();

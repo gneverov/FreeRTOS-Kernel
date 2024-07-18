@@ -36,6 +36,8 @@
 #include "rp2040_config.h"
 #include "hardware/clocks.h"
 #include "hardware/exception.h"
+#include "hardware/irq.h"
+#include "hardware/structs/scb.h"
 
 /*
  * LIB_PICO_MULTICORE == 1, if we are linked with pico_multicore (note that
@@ -140,6 +142,10 @@ UBaseType_t uxCriticalNestings[ configNUMBER_OF_CORES ] = { 0 };
     static spin_lock_t * pxYieldSpinLock[ configNUMBER_OF_CORES ];
     static uint32_t ulYieldSpinLockSaveValue[ configNUMBER_OF_CORES ];
 #endif /* configSUPPORT_PICO_SYNC_INTEROP */
+
+#if ( configSUPPORT_PICO_TIME_INTEROP == 1 )
+    #include "pico/time.h"
+#endif /* configSUPPORT_PICO_TIME_INTEROP */
 
 /*
  * The number of SysTick increments that make up one tick period.
@@ -281,7 +287,7 @@ void vPortStartFirstTask( void )
 }
 /*-----------------------------------------------------------*/
 
-#if ( LIB_PICO_MULTICORE == 1 ) && ( configSUPPORT_PICO_SYNC_INTEROP == 1 )
+#if ( configNUMBER_OF_CORES > 1 ) || (( LIB_PICO_MULTICORE == 1 ) && ( configSUPPORT_PICO_SYNC_INTEROP == 1 ))
     static void prvFIFOInterruptHandler()
     {
         /* We must remove the contents (which we don't care about)
@@ -551,6 +557,11 @@ void vYieldCore( int xCoreID )
 
 /*-----------------------------------------------------------*/
 
+#ifndef NDEBUG
+static volatile TaskHandle_t dbg_task;
+#endif
+
+
 void xPortPendSVHandler( void )
 {
     /* This is a naked function. */
@@ -602,6 +613,17 @@ void xPortPendSVHandler( void )
             "   cpsie i                             \n"
             "   pop {r2, r3}                        \n" /* lr goes in r3. r2 now holds tcb pointer. */
             "                                       \n"
+#ifndef NDEBUG
+            "   ldr r1, dbg_task2                   \n"
+            "   ldr r0, [r1]                        \n"
+            "   cmp r0, #0                          \n"
+            "   beq dbg_task_null                   \n"
+            "   str r0, [r2]                        \n" /* r2 holds tcb pointer from dbg_task. */
+            "   movs r0, #0                         \n"
+            "   str r0, [r1]                        \n" /* clear dbg_task. */
+            "                                       \n"
+            "   dbg_task_null:                      \n"
+#endif            
             "   ldr r1, [r2]                        \n"
             "   ldr r0, [r1]                        \n" /* The first item in pxCurrentTCB is the task top of stack. */
             "   adds r0, r0, #16                    \n" /* Move to the high registers. */
@@ -635,6 +657,9 @@ void xPortPendSVHandler( void )
             "   bx r3                               \n"
             "   .align 4                            \n"
             "pxCurrentTCBConst2: .word pxCurrentTCB \n"
+#ifndef NDEBUG            
+            "dbg_task2: .word dbg_task              \n"
+#endif
         );
     #else /* if ( configNUMBER_OF_CORES == 1 ) */
         __asm volatile
@@ -695,6 +720,18 @@ void xPortPendSVHandler( void )
             "   cpsie i                             \n"
             "   pop {r2, r3}                        \n" /* lr goes in r3. r2 now holds tcb pointer. */
             "                                       \n"
+#ifndef NDEBUG
+            "   adr r0, ulAsmLocals2                \n"
+            "   ldr r1, [r0, #8]                    \n"
+            "   ldr r0, [r1]                        \n"
+            "   cmp r0, #0                          \n"
+            "   beq dbg_task_null                   \n"
+            "   str r0, [r2]                        \n" /* r2 holds tcb pointer from dbg_task. */
+            "   movs r0, #0                         \n"
+            "   str r0, [r1]                        \n"
+            "                                       \n" /* clear dbg_task. */
+            "   dbg_task_null:                      \n"
+#endif               
             "   ldr r1, [r2]                        \n"
             "   ldr r0, [r1]                        \n" /* The first item in pxCurrentTCB is the task top of stack. */
             "   adds r0, r0, #16                    \n" /* Move to the high registers. */
@@ -731,6 +768,9 @@ void xPortPendSVHandler( void )
             "ulAsmLocals2:                         \n"
             "   .word 0xD0000000                   \n" /* SIO */
             "   .word pxCurrentTCBs                \n"
+#ifndef NDEBUG            
+            "   .word dbg_task                     \n"
+#endif            
         );
     #endif /* if ( configNUMBER_OF_CORES == 1 ) */
 }
