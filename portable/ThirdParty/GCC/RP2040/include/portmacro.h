@@ -218,7 +218,9 @@ static inline void vPortRecursiveLock( uint32_t ulLockNum,
     static volatile uint8_t ucOwnedByCore[ portMAX_CORE_COUNT ][portRTOS_SPINLOCK_COUNT];
     static volatile uint8_t ucRecursionCountByLock[ portRTOS_SPINLOCK_COUNT ];
 
+    #ifdef configASSERT
     configASSERT( ulLockNum < portRTOS_SPINLOCK_COUNT );
+    #endif
     uint32_t ulCoreNum = get_core_num();
 
     if( uxAcquire )
@@ -226,20 +228,26 @@ static inline void vPortRecursiveLock( uint32_t ulLockNum,
         if (!spin_try_lock_unsafe(pxSpinLock)) {
             if( ucOwnedByCore[ ulCoreNum ][ ulLockNum ] )
             {
+                #ifdef configASSERT
                 configASSERT( ucRecursionCountByLock[ ulLockNum ] != 255u );
+                #endif
                 ucRecursionCountByLock[ ulLockNum ]++;
                 return;
             }
             spin_lock_unsafe_blocking(pxSpinLock);
         }
+        #ifdef configASSERT
         configASSERT( ucRecursionCountByLock[ ulLockNum ] == 0 );
+        #endif
         ucRecursionCountByLock[ ulLockNum ] = 1;
         ucOwnedByCore[ ulCoreNum ][ ulLockNum ] = 1;
     }
     else
     {
+        #ifdef configASSERT
         configASSERT( ( ucOwnedByCore[ ulCoreNum ] [ulLockNum ] ) != 0 );
         configASSERT( ucRecursionCountByLock[ ulLockNum ] != 0 );
+        #endif
 
         if( !--ucRecursionCountByLock[ ulLockNum ] )
         {
